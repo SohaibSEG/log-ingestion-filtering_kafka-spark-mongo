@@ -55,10 +55,10 @@ This will start all services, including Kafka, Zookeeper, Spark, MongoDB, and th
 
 ## Log Processing Logic
 The log consumer classifies logs into four levels:
-- **Critical** (50% chance of being saved)
-- **Error** (30% chance)
-- **Warning** (15% chance)
-- **Info** (5% chance)
+- **Critical** (100% chance of being saved)
+- **Error** (80% chance)
+- **Warning** (50% chance)
+- **Info** (20% chance)
 
 This selective persistence reduces storage usage while retaining high-priority logs for analysis.
 

@@ -39,10 +39,10 @@ parsed_logs = log_stream.withColumn("level", expr("get_json_object(log, '$.level
 
 # Define Probabilities for Filtering
 PROBABILITIES = {
-    "CRITICAL": 0.50,  # 50% chance
-    "ERROR": 0.30,     # 30% chance
-    "WARNING": 0.15,   # 15% chance
-    "INFO": 0.05       # 5% chance
+    "CRITICAL": 1,      # 100% chance
+    "ERROR": 0.80,     # 80% chance
+    "WARNING": 0.50,   # 50% chance
+    "INFO": 0.20      # 20% chance
 }
 
 # Add a random value column for probabilistic filtering
