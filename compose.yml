@@ -1,0 +1,125 @@
+networks:
+  bigdata-network:
+    driver: bridge
+    name : bigdata-network
+
+
+services:
+  # Zookeeper for Kafka Coordination
+  zookeeper:
+    image: wurstmeister/zookeeper:latest
+    container_name: zookeeper
+    platform: linux/amd64
+    restart: always
+    ports:
+      - "2181:2181"
+    networks:
+      - bigdata-network
+
+  # Kafka for log streaming
+  kafka:
+    image: wurstmeister/kafka:latest
+    container_name: kafka
+    restart: always
+    ports:
+      - "9092:9092"
+      - "29092:29092"
+    environment:
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,PLAINTEXT_HOST://0.0.0.0:29092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:29092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_BROKER_ID: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: 'true'
+    depends_on:
+      - zookeeper
+    networks:
+      - bigdata-network
+    volumes:
+      - ./volumes/kafka_data:/var/lib/kafka/data
+
+  spark-master:
+    image: bitnami/spark:latest
+    container_name: spark-master
+    environment:
+      - SPARK_MODE=master
+      - SPARK_SECURITY_AUTHENTICATION=false
+      - SPARK_RPC_AUTHENTICATION_ENABLED=false
+      - SPARK_MASTER_HOST=spark-master
+      - SPARK_LOCAL_IP=spark-master
+    ports:
+      - "8080:8080"
+      - "7077:7077"
+    networks:
+      - bigdata-network
+
+  # Spark Worker Node
+  spark-worker:
+    image: bitnami/spark:latest
+    container_name: spark-worker
+    environment:
+      - SPARK_MODE=worker
+      - SPARK_MASTER_URL=spark://spark-master:7077
+      - SPARK_WORKER_MEMORY=2G
+      - SPARK_WORKER_CORES=1
+      - SPARK_SECURITY_AUTHENTICATION=false
+      - SPARK_RPC_AUTHENTICATION_ENABLED=false
+      - SPARK_LOCAL_IP=spark-worker
+      - SPARK_WORKER_WEBUI_PORT=8082  # Set the worker UI port
+    depends_on:
+      - spark-master
+    ports:
+      - "8082:8082"
+    networks:
+      - bigdata-network
+
+  # MongoDB for storing processed logs
+  mongodb:
+    image: mongo:latest
+    container_name: mongodb
+    hostname: mongodb
+    environment:
+      - MONGO_INITDB_ROOT_USERNAME=root
+      - MONGO_INITDB_ROOT_PASSWORD=example
+    ports:
+      - "27017:27017"
+    volumes:
+      - ./volumes/mongodb_data:/data/db
+    networks:
+      - bigdata-network
+
+  # MongoDB Express (Web-based MongoDB admin interface)
+  mongo-express:
+    image: mongo-express:latest
+    container_name: mongo-express
+    ports:
+      - "8081:8081"
+    environment:
+      - ME_CONFIG_MONGODB_ADMINUSERNAME=root
+      - ME_CONFIG_MONGODB_ADMINPASSWORD=example
+      - ME_CONFIG_MONGODB_URL=mongodb://root:example@mongodb:27017/
+    depends_on:
+      - mongodb
+    networks:
+      - bigdata-network
+
+  log-consumer:
+    restart: always
+    build:
+      context: ./log_consumer
+      dockerfile: Dockerfile
+    container_name: log-consumer
+    depends_on:
+      - kafka
+      - spark-master
+      - spark-worker
+      - mongodb
+    networks:
+      - bigdata-network
+    environment:
+      - KAFKA_BROKER=kafka:9092
+      - MONGO_URI=mongodb://root:example@mongodb:27017
+      - SPARK_MASTER=spark://spark-master:7077
+    volumes:
+      - ./volumes/tmp/checkpoints:/tmp/checkpoints
